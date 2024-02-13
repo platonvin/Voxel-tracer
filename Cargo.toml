@@ -11,6 +11,7 @@ exr = "1.72.0"
 dot_vox = { version = "5.1.1", default-features = false }
 fps_counter = "3.0.0"
 glam = "0.25.0"
+block-mesh = "0.2.0"
 
 [profile.dev]
 opt-level = 0
@@ -21,6 +22,7 @@ incremental = true
 strip = true
 debug-assertions = true
 # rustflags = ["-Z", "threads=8"]
+rustc-wrapper = "C:/sccache/sccache.exe"
 
 
 [profile.release]
@@ -34,3 +36,5 @@ debug-assertions = false
 
 [features]
 dev = []
+
+# [build]

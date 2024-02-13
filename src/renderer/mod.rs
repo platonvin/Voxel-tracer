@@ -3,12 +3,13 @@ extern crate winit;
 extern crate exr;
 
 pub mod loader;
+pub mod world;
 
-use std::{process::Command, sync::Arc};
+use std::{ops::RangeInclusive, process::Command, sync::Arc};
 use std::convert::TryInto;
 use std::convert::TryFrom;
 
-use vulkano::{buffer::{BufferContents, Subbuffer}, device::{DeviceCreateInfo, QueueCreateInfo}, image::ImageUsage, instance::{debug::{DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo}, InstanceCreateInfo}, swapchain::{self, SwapchainCreateInfo}};
+use vulkano::{buffer::{BufferContents, Subbuffer}, device::{DeviceCreateInfo, QueueCreateInfo}, format::Format, image::{ImageCreateInfo, ImageUsage}, instance::{debug::{DebugUtilsMessenger, DebugUtilsMessengerCallback, DebugUtilsMessengerCreateInfo}, InstanceCreateInfo}, memory::allocator::{AllocationCreateInfo, MemoryAllocator, StandardMemoryAllocator}, pipeline::graphics::{depth_stencil::{CompareOp, DepthState, DepthStencilState}, rasterization::CullMode}, swapchain::{self, SwapchainCreateInfo}};
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo, SubpassBeginInfo, SubpassContents};
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
@@ -34,8 +35,12 @@ use winit::{event_loop::EventLoop, window::{Window, WindowBuilder}};
 #[derive(BufferContents, Vertex)]
 #[repr(C)]
 pub struct MyVertex {
-    #[format(R32G32_SFLOAT)]
-    pub position: [f32; 2],
+    #[format(R32G32B32_SFLOAT)]
+    pub position: [f32; 3],
+    #[format(R32G32B32_SFLOAT)]
+    pub normal: [f32; 3],
+    #[format(R8_UINT)]
+    pub mat: u8,
 }
 
 // #[derive(Debug)]
@@ -84,27 +89,44 @@ pub fn get_render_pass(device: Arc<Device>, swapchain: Arc<Swapchain>) -> Arc<Re
                 load_op: Clear,
                 store_op: Store,
             },
+            depth: {
+                format: Format::D16_UNORM, // set the format the same as the swapchain
+                samples: 1,
+                load_op: Clear,
+                store_op: DontCare,
+            }
         },
         pass: {
             color: [color],
-            depth_stencil: {},
+            depth_stencil: {depth},
         },
     ).unwrap()
 }
 
-pub fn get_framebuffers(images: &[Arc<Image>], render_pass: Arc<RenderPass>) -> Vec<Arc<Framebuffer>> {
+pub fn get_framebuffers(images: &[Arc<Image>], render_pass: Arc<RenderPass>, allocator: Arc<dyn MemoryAllocator>) -> Vec<Arc<Framebuffer>> {
     images
         .iter()
         .map(|image| {
+            let depth_image = Image::new(allocator.clone(), ImageCreateInfo {
+                image_type: vulkano::image::ImageType::Dim2d,
+                format: Format::D16_UNORM,
+                extent: image.extent(),
+                usage: ImageUsage::DEPTH_STENCIL_ATTACHMENT,
+                // initial_layout
+                ..Default::default()
+            }, AllocationCreateInfo {
+                ..Default::default()
+            }).unwrap();
+            let depth_view = ImageView::new_default(depth_image).unwrap();
+
             let view = ImageView::new_default(image.clone()).unwrap();
             Framebuffer::new(
                 render_pass.clone(),
                 FramebufferCreateInfo {
-                    attachments: vec![view],
+                    attachments: vec![view, depth_view],
                     ..Default::default()
                 },
-            )
-            .unwrap()
+            ).unwrap()
         }).collect::<Vec<_>>()
 }
 
@@ -153,6 +175,15 @@ pub fn get_graphical_pipeline(device: Arc<Device>, vs: Arc<ShaderModule>, fs: Ar
                 ColorBlendAttachmentState::default(),
             )),
             subpass: Some(subpass.into()),
+            depth_stencil_state: Some(DepthStencilState {
+                // depth_bounds: Some(RangeInclusive::new(-1.0, 1.0)),
+                depth: Some(DepthState {
+                    write_enable: true,
+                    compare_op: CompareOp::Less
+                }),
+                ..Default::default()
+            }),
+            // depth_stencil_state: Some(DepthStencilState::simple),
             ..GraphicsPipelineCreateInfo::layout(layout)
         },
     ).unwrap()
@@ -177,7 +208,7 @@ pub fn get_command_buffers(
             builder
                 .begin_render_pass(
                     RenderPassBeginInfo {
-                        clear_values: vec![Some([0.0, 0.0, 1.0, 1.0].into())],
+                        clear_values: vec![Some([0.0, 0.0, 1.0, 1.0].into()), Some(vulkano::format::ClearValue::Depth(1.0))],
                         ..RenderPassBeginInfo::framebuffer(framebuffer.clone())
                     },
                     SubpassBeginInfo {

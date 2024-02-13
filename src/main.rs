@@ -3,13 +3,15 @@ extern crate winit;
 extern crate exr;
 extern crate fps_counter;
 extern crate glam;
+extern crate block_mesh;
 
 use std::{io::empty, ops::Sub, sync::Arc};
 
+use block_mesh::{ndshape::ConstShape3u32, GreedyQuadsBuffer, MergeVoxel, OrientedBlockFace, UnitQuadBuffer, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 use fps_counter::FPSCounter;
 
 use glam::{IVec3, Mat4};
-use vulkano::buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer};
+use vulkano::{buffer::{Buffer, BufferCreateInfo, BufferUsage, Subbuffer}, image::Image};
 use vulkano::command_buffer::allocator::{StandardCommandBufferAllocator, StandardCommandBufferAllocatorCreateInfo};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBufferUsage, CopyBufferInfo, PrimaryCommandBufferAbstract};
 use vulkano::device::{DeviceExtensions};
@@ -26,87 +28,11 @@ mod renderer;
 use renderer::*;
 use renderer::loader::*;
 
-const BLOCK_SIZE: usize = 16;
-const CHUNK_SIZE: usize = 8;
-const WORLD_SIZE: usize = 16;
 // const VISIBLE_WORLD: usize = 8;
 
-// #[derive(Debug)]
-
-struct VoxelBlock {
-    ///order is X -> Y -> Z. Each u8 is Material id in palette
-    data: [u8; BLOCK_SIZE*BLOCK_SIZE*BLOCK_SIZE],
-}
-struct Mesh {
-    ///vertex data on gpu side
-    vertices: Subbuffer<[MyVertex]>,
-    ///index data on gpu side
-    indices: Subbuffer<[u32]>,
-    ///rotation, shift and scale it represents
-    trans: Mat4,
-}
-struct VoxelChunk {
-    ///order is X -> Y -> Z. Each u8 is VoxelBlock id in palette
-    mesh: Mesh,
-    /// is stored on CPU side ONLY because of physics 
-    /// Also stored on GPU for rendering, Changing anything on CPU does not auto-change GPU side
-    data: [u8; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE],
-}
-/// All meshes shoult be reflected in world every frame
-/// except for chunks, they are static and reflected on chunk loading (treat this as optimiztion, it could be done every frame but its pointless for now)
-struct World {
-    ///represents where chunks[0] starts
-    current_origin: IVec3,
-    ///order is X -> Y -> Z
-    chunks: [VoxelChunk; 5*5*2],
-    /// GPU-side buffer that stores world with all chunks within it
-    united_blocks: Subbuffer<u8>,
-}
-impl VoxelBlock {
-    //sets to Zero
-    fn new() -> Self {
-        VoxelBlock {data: [0; BLOCK_SIZE*BLOCK_SIZE*BLOCK_SIZE]}
-    }
-    //order is X -> Y -> Z
-    fn get(&self, x: usize, y: usize, z: usize) -> u8 {
-        let index = x + y*BLOCK_SIZE + z*BLOCK_SIZE*BLOCK_SIZE;
-        self.data[index]
-    }
-    //order is X -> Y -> Z
-    fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
-        let index = x + y*BLOCK_SIZE + z*BLOCK_SIZE*BLOCK_SIZE;
-        self.data[index] = value;
-    }
-}
-impl VoxelChunk {
-    //sets voxels to Zero, but requires Mesh
-    fn new(mesh: Mesh) -> Self {
-        VoxelChunk {
-            mesh: mesh,
-            data: [0; CHUNK_SIZE*CHUNK_SIZE*CHUNK_SIZE]
-        }
-    }
-    //order is X -> Y -> Z
-    fn get(&self, x: usize, y: usize, z: usize) -> u8 {
-        let index = x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE;
-        self.data[index]
-    }
-    //order is X -> Y -> Z
-    fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
-        let index = x + y*CHUNK_SIZE + z*CHUNK_SIZE*CHUNK_SIZE;
-        self.data[index] = value;
-    }
-}
-
-
-pub fn load_map(){
-    let scene = dot_vox::load("assets/scene.vox").unwrap();
-    
-    // scene.models
-    // dot_vox::
-}
-
 fn main() {
+    let vertices = load_map();
+
     compile_shaders();
     
     let event_loop = EventLoop::new();
@@ -156,18 +82,19 @@ fn main() {
     // });
 
     let present_render_pass  = get_render_pass(device.clone(), swapchain.clone());
-    let present_framebuffers = get_framebuffers(&swapchain_images, present_render_pass.clone());
+    let present_framebuffers = get_framebuffers(&swapchain_images, present_render_pass.clone(), memory_allocator.clone());
 
 
-    let vertex1 = MyVertex {
-        position: [-0.5, -0.5],
-    };
-    let vertex2 = MyVertex {
-        position: [0.0, 0.5],
-    };
-    let vertex3 = MyVertex {
-        position: [0.5, -0.25],
-    };
+    // let vertex1 = MyVertex {
+    //     position: [-0.5, -0.5],
+    // };
+    // let vertex2 = MyVertex {
+    //     position: [0.0, 0.5],
+    // };
+    // let vertex3 = MyVertex {
+    //     position: [0.5, -0.25],
+    // };
+    let l = vertices.len();
     let vertex_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
@@ -179,7 +106,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        vec![vertex1, vertex2, vertex3],
+        vertices,
     ).unwrap();
 
     let local_vertex_buffer = Buffer::new_slice::<MyVertex>(
@@ -192,7 +119,7 @@ fn main() {
             memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
             ..Default::default()
         },
-        3 as DeviceSize
+        l as DeviceSize
     ).unwrap();
 
     let command_buffer_allocator = StandardCommandBufferAllocator::new(
@@ -284,7 +211,7 @@ fn main() {
                     .expect("failed to recreate swapchain");
 
                 swapchain = new_swapchain;
-                let new_framebuffers = get_framebuffers(&new_images, present_render_pass.clone());
+                let new_framebuffers = get_framebuffers(&new_images, present_render_pass.clone(), memory_allocator.clone());
 
                 if window_resized {
                     window_resized = false;
