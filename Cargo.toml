@@ -1,0 +1,36 @@
+[package]
+name = "vk-rs"
+version = "0.0.0"
+
+[dependencies]
+vulkano = "0.34.0"
+image = { version = "0.24.0", default-features = false }
+winit = { version = "0.28.0", default-features = false }
+rand = { version = "0.8.5", default-features = false }
+exr = "1.72.0"
+dot_vox = { version = "5.1.1", default-features = false }
+fps_counter = "3.0.0"
+glam = "0.25.0"
+
+[profile.dev]
+opt-level = 0
+overflow-checks = true
+lto = false
+panic = "unwind"
+incremental = true
+strip = true
+debug-assertions = true
+# rustflags = ["-Z", "threads=8"]
+
+
+[profile.release]
+opt-level = 3
+overflow-checks = false
+lto = "fat"
+panic = "abort"
+incremental = true
+strip = false
+debug-assertions = false
+
+[features]
+dev = []

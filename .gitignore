@@ -1,0 +1,8 @@
+/target
+todo
+.vscode
+deprecated
+Cargo.lock
+
+#every compiled shader
+shaders/*.spv
