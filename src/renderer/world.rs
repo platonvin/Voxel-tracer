@@ -197,12 +197,12 @@ impl World {
                     }
                     // println!();
                     
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[0  ], normal: normals[0  ], mat: 2});
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1  ], normal: normals[1  ], mat: 2});
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[2  ], normal: normals[2  ], mat: 2});
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+0], normal: normals[1+0], mat: 2});
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+1], normal: normals[1+1], mat: 2});
-                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+2], normal: normals[1+2], mat: 2});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[0  ], normal: normals[0  ], mat: mats[0  ].0});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1  ], normal: normals[1  ], mat: mats[1  ].0});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[2  ], normal: normals[2  ], mat: mats[2  ].0});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+0], normal: normals[1+0], mat: mats[1+0].0});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+1], normal: normals[1+1], mat: mats[1+1].0});
+                    self.chunks[0].mesh.vertices.push(MyVertex {position: positions[1+2], normal: normals[1+2], mat: mats[1+2].0});
                 }
             };
             self.set_block_in_palette(current_block, block_id);
