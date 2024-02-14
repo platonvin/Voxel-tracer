@@ -1,13 +1,17 @@
 extern crate dot_vox;
 
-use std::{boxed, convert::TryInto, sync::Arc};
+use std::{boxed, convert::TryInto, mem::MaybeUninit, sync::Arc};
 
 use block_mesh::{ilattice::glam::{IVec3, Mat4, Vec3, Vec4}, ndshape::ConstShape3u32, GreedyQuadsBuffer, MergeStrategy, MergeVoxel, UnitQuadBuffer, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
+use glam::UVec4;
 // use self::dot_vox::Voxel;
 use vulkano::{buffer::Subbuffer, image::Image};
 
-use crate::MyVertex;
+use crate::{ogt_voxel_meshify::{ogt_mesh_from_paletted_voxels_simple, ogt_mesh_rgba, ogt_voxel_meshify_context}, MyVertex};
 
+// use crate::{ogt::{self, ogt_mesh_from_paletted_voxels_greedy, ogt_mesh_from_paletted_voxels_simple, ogt_mesh_rgba, ogt_voxel_meshify_context}, MyVertex};
+// pub(super)
+// ogt
 
 const BLOCK_SIZE: usize = 16;
 const CHUNK_SIZE: usize = 8;
@@ -108,7 +112,7 @@ impl block_mesh::MergeVoxel for VoxelID {
     type MergeValue = Self;
 
     fn merge_value(&self) -> Self::MergeValue {
-        VoxelID(1)
+        VoxelID(255)
         // *self
     }
 }
@@ -152,7 +156,7 @@ impl World {
         // println!("lmao");
         let scene = dot_vox::load("assets/scene.vox").unwrap();
         // scene.materials
-        
+
         let mut block_id = 1;
         for model in &scene.models {
             let mut current_block = VoxelBlock::new(); //zeroed
@@ -164,7 +168,7 @@ impl World {
                 let y = voxel.y as usize;
                 let z = voxel.z as usize;
                 current_block.data[ x + BLOCK_SIZE*y + BLOCK_SIZE*BLOCK_SIZE*z   ] = VoxelID(voxel.i+1);
-                   temp_block     [(x+1) +     18*(y+1) +             18*18*(z+1)] = VoxelID(voxel.i+1);
+                   temp_block     [(x+1) +     18*(y+1) +             18*18*(z+1)] = VoxelID(voxel.i);
             }
             
             // let mut current_buffer = UnitQuadBuffer::new();
@@ -183,9 +187,9 @@ impl World {
                 
                 for &quad in face_group{
                     // let positions = face_dir.quad_mesh_positions(&quad.into(), 1.0);
+                    let corners = face_dir.quad_corners(&quad);
                     let positions = face_dir.quad_mesh_positions(&quad, 1.0);
                     // let corners = face_dir.quad_corners(&quad.into());
-                    let corners = face_dir.quad_corners(&quad);
 
                     let mut mats = [VoxelID(0); 4];
                     for i in 0..4{
@@ -209,4 +213,50 @@ impl World {
             block_id+=1;
         };
     }
+
+    pub fn load_map_ogt(&mut self){
+        let scene = dot_vox::load("assets/scene.vox").unwrap();
+        //we dont need colors directly so initialization is unnesessary. We'll just use material index from resulting mesh
+        let mut ogt_palette = [ogt_mesh_rgba {r:4,g:3,b:2,a:1}; 256];
+        
+
+        for model in &scene.models {
+            let mut current_block = VoxelBlock::new(); //zeroed
+            
+            for voxel in &model.voxels{
+                let x = voxel.x as usize;
+                let y = voxel.y as usize;
+                let z = voxel.z as usize;
+                current_block.data[ x + BLOCK_SIZE*y + BLOCK_SIZE*BLOCK_SIZE*z] = VoxelID(voxel.i+1);
+            }
+            let mut res;
+println!("lmao");
+            unsafe {
+                let ctx: ogt_voxel_meshify_context = MaybeUninit::zeroed().assume_init();
+                res =  ogt_mesh_from_paletted_voxels_simple(&ctx, current_block.data.as_ptr() as *const u8, 16, 16, 16, ogt_palette.as_ptr() as *const ogt_mesh_rgba);
+                assert!(res != std::ptr::null_mut());
+            }
+println!("lmao");
+            for i in 0..(unsafe { *res }).index_count {
+                let vertex_index = unsafe { *(unsafe { *res }).indices.wrapping_add(i as usize) };
+                println!("{}", vertex_index);
+                self.chunks[0].mesh.vertices.push(MyVertex {
+                    position: {[
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).pos.x,
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).pos.y,
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).pos.z,
+                    ]},
+                    normal: {[
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).normal.x,
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).normal.y,
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).normal.z,
+                    ]},
+                    mat: {
+                        (unsafe { *(unsafe { *res }).vertices.wrapping_add(vertex_index as usize) }).palette_index as u8
+                    }
+                });
+            }
+        }
+    }
 }
+

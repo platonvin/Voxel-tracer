@@ -29,14 +29,19 @@ use renderer::*;
 use renderer::loader::*;
 use renderer::world::*;
 
+use crate::ogt_voxel_meshify::ogt_mesh;
+
 // const VISIBLE_WORLD: usize = 8;
 
 fn main() {
     println!("lmao");
     let mut world = World::new();
     println!("lmao");
+
+    let a: ogt_mesh;
     
-    world.load_map();
+    // world.load_map();
+    world.load_map_ogt();
     println!("lmao");
 
     compile_shaders();
