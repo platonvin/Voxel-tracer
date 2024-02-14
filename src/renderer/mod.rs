@@ -32,7 +32,7 @@ use vulkano::swapchain::{Surface, Swapchain};
 use winit::{event_loop::EventLoop, window::{Window, WindowBuilder}};
 
 
-#[derive(BufferContents, Vertex)]
+#[derive(BufferContents, Vertex, Clone, Copy)]
 #[repr(C)]
 pub struct MyVertex {
     #[format(R32G32B32_SFLOAT)]

@@ -15,14 +15,18 @@ block-mesh = "0.2.0"
 
 [profile.dev]
 opt-level = 0
+debug = true
+split-debuginfo = '...'  # Platform-specific.
+strip = "none"
+debug-assertions = true
 overflow-checks = true
 lto = false
-panic = "unwind"
+panic = 'unwind'
 incremental = true
-strip = true
-debug-assertions = true
+codegen-units = 256
+rpath = false
 # rustflags = ["-Z", "threads=8"]
-rustc-wrapper = "C:/sccache/sccache.exe"
+# rustc-wrapper = "C:/sccache/sccache.exe"
 
 
 [profile.release]

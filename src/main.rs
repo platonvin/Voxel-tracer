@@ -5,7 +5,7 @@ extern crate fps_counter;
 extern crate glam;
 extern crate block_mesh;
 
-use std::{io::empty, ops::Sub, sync::Arc};
+use std::{io::empty, mem::MaybeUninit, ops::{Deref, Sub}, sync::Arc};
 
 use block_mesh::{ndshape::ConstShape3u32, GreedyQuadsBuffer, MergeVoxel, OrientedBlockFace, UnitQuadBuffer, Voxel, VoxelVisibility, RIGHT_HANDED_Y_UP_CONFIG};
 use fps_counter::FPSCounter;
@@ -27,11 +27,17 @@ use winit::event_loop::{ControlFlow, EventLoop};
 mod renderer;
 use renderer::*;
 use renderer::loader::*;
+use renderer::world::*;
 
 // const VISIBLE_WORLD: usize = 8;
 
 fn main() {
-    let vertices = load_map();
+    println!("lmao");
+    let mut world = World::new();
+    println!("lmao");
+    
+    world.load_map();
+    println!("lmao");
 
     compile_shaders();
     
@@ -84,17 +90,8 @@ fn main() {
     let present_render_pass  = get_render_pass(device.clone(), swapchain.clone());
     let present_framebuffers = get_framebuffers(&swapchain_images, present_render_pass.clone(), memory_allocator.clone());
 
+    let l = world.chunks[0].mesh.vertices.len();
 
-    // let vertex1 = MyVertex {
-    //     position: [-0.5, -0.5],
-    // };
-    // let vertex2 = MyVertex {
-    //     position: [0.0, 0.5],
-    // };
-    // let vertex3 = MyVertex {
-    //     position: [0.5, -0.25],
-    // };
-    let l = vertices.len();
     let vertex_buffer = Buffer::from_iter(
         memory_allocator.clone(),
         BufferCreateInfo {
@@ -106,7 +103,7 @@ fn main() {
                 | MemoryTypeFilter::HOST_SEQUENTIAL_WRITE,
             ..Default::default()
         },
-        vertices,
+        world.chunks[0].mesh.vertices.clone(),
     ).unwrap();
 
     let local_vertex_buffer = Buffer::new_slice::<MyVertex>(
